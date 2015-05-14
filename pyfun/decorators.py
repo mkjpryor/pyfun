@@ -4,8 +4,6 @@ This module provides function decorators
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-__all__ = ["auto_bind", "auto_bind_n", "generic", "singledispatch"]
-
 import functools
 from inspect import signature, Parameter as P
 
@@ -82,7 +80,7 @@ def generic(f):
     def resolve(the_type):
         impl = dispatcher.dispatch(the_type)
         if impl is dummy:
-            raise TypeError('Unable to locate implementation for %s' % repr(the_type))
+            raise TypeError('Unable to locate implementation of %s for %s' % (f.__name__, repr(the_type)))
         return impl
     raise_generic_error.resolve = resolve
     # Make the wrapper function look like the wrapped function before returning it
@@ -104,10 +102,39 @@ def singledispatch(n):
         # We want to return a function that uses the dispatcher to dispatch on the n-th arg
         def dispatch_on_nth_arg(*args, **kwargs):
             return dispatcher.resolve(args[n].__class__)(*args, **kwargs)
-        # Attach the register method from the dispatcher as a method on the function in
-        # order to allow type-specific implementations to be registered
+        # Attach the register method from the dispatcher as a method on the function to
+        # allow the registering of specific implementations
         dispatch_on_nth_arg.register = dispatcher.register
         # Make the wrapper function look like the wrapped function before returning it
         functools.update_wrapper(dispatch_on_nth_arg, f)
         return dispatch_on_nth_arg
     return decorator
+
+
+def infix(f):
+    """
+    Allows a function of two arguments to be used as an infix function
+    
+    For example:
+    
+        @infix
+        def add(a, b):
+            return a + b
+            
+        print(add(1, 2))  # Prints 3
+        print(1 *add* 2)  # Prints 3
+    """
+    def bind_left(_, other):
+        # When the infix expression is started, return a new object will __mul__
+        # defined that knows how to finish the expression
+        g = functools.partial(f, other)
+        return type('', (object,), { '__mul__' : lambda _, x: g(x) })()
+    # Return an object that knows how to start the infix expression
+    # It can also be called directly
+    ifix = type('', (object,), {
+        '__rmul__' : bind_left,
+        '__call__' : lambda _, *args, **kwargs: f(*args, **kwargs)
+    })()
+    # Make it look like f for any future decorators
+    functools.update_wrapper(ifix, f)
+    return ifix
