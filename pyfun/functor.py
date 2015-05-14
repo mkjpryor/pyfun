@@ -4,14 +4,10 @@ This module provides the functor type and associated operations
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-from pyfun.decorators import singledispatch, auto_bind_n
+__all__ = ["FunctorMeta", "Functor", "fmap"]
 
+from pyfun.decorators import singledispatch, auto_bind
 
-#########################################################################################
-## The Functor class exists purely for instance and subclass checking
-##
-## A class is considered a functor if there is an fmap implementation available for it
-#########################################################################################
 
 class FunctorMeta(type):
     """
@@ -30,7 +26,7 @@ class FunctorMeta(type):
         Implements issubclass for checking if something is a functor
         """
         # A class is a functor if there is a specific fmap implementation for it
-        return fmap.dispatch(subclass) is not fmap.dispatch(object)
+        return fmap.resolve(subclass) is not fmap.resolve(object)
     
 
 class Functor(metaclass = FunctorMeta):
@@ -43,15 +39,10 @@ class Functor(metaclass = FunctorMeta):
     pass
 
 
-#########################################################################################
-## Functions that must be defined to be a functor
-#########################################################################################
-
-@auto_bind_n(2)     # Because @singledispatch returns an argument that has
-                    # no required positional args, we must use auto_bind_n
-@singledispatch(1)  # Dispatch based on the type of the 2nd argument
+@auto_bind
+@singledispatch(1)
 def fmap(f, Fa):
     """
-    Signature:  Functor F => (a -> b) -> F a -> F b
+    Signature:  Functor F => fmap :: (a -> b) -> F a -> F b
     """
-    raise NotImplementedError("Not implemented for %s" % type(Fa))
+    pass
