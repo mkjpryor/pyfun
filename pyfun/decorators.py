@@ -122,17 +122,17 @@ def infix(f):
             return a + b
             
         print(add(1, 2))  # Prints 3
-        print(1 *add* 2)  # Prints 3
+        print(1 |add| 2)  # Prints 3
     """
-    def bind_left(_, other):
-        # When the infix expression is started, return a new object will __mul__
-        # defined that knows how to finish the expression
+    def start_infix(_, other):
+        # When the infix expression is started, return a new object that
+        # knows how to finish the expression
         g = functools.partial(f, other)
-        return type('', (object,), { '__mul__' : lambda _, x: g(x) })()
+        return type('', (object,), { '__or__' : lambda _, x: g(x) })()
     # Return an object that knows how to start the infix expression
     # It can also be called directly
     ifix = type('', (object,), {
-        '__rmul__' : bind_left,
+        '__ror__' : start_infix,
         '__call__' : lambda _, *args, **kwargs: f(*args, **kwargs)
     })()
     # Make it look like f for any future decorators
