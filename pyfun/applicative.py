@@ -4,7 +4,7 @@ This module provides the applicative and alternative types and associated operat
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-from pyfun.decorators import singledispatch, generic, auto_bind, infix
+from pyfun.decorators import singledispatch, generic, auto_bind, infix, multipledispatch
 from pyfun import functor
 
 
@@ -17,24 +17,25 @@ class Applicative(functor.Functor):
 
 @infix
 @auto_bind
-@singledispatch(1)
-def apply(Ff, Fa):
+@multipledispatch
+def ap(Ff, Fa):
     """
     Signature:  Applicative F => ap :: F (a -> b) -> F a -> F b
     """
-    pass
+    raise TypeError('Unable to locate implementation for (%s, %s)' % (Ff.__class__.__name__,
+                                                                      Fa.__class__.__name__))
 
 @generic
 def unit(a):
     """
     Signature: Applicative F => unit :: a -> F a
     """
-    pass
+    raise TypeError('Unable to locate type-specific implementation')
 
 
 @functor.fmap.register(Applicative)
 def fmap(f, Fa):
-    return apply(unit.resolve(Fa.__class__)(f), Fa)
+    return unit.resolve(Fa.__class__)(f) |ap| Fa
 
 
 #########################################################################################
@@ -53,13 +54,14 @@ def empty():
     """
     Signature: Alternative F => empty :: F a
     """
-    pass
+    raise TypeError('Unable to locate type-specific implementation')
 
 @infix
 @auto_bind
-@singledispatch(0)
+@multipledispatch
 def append(Fa, Fa2):
     """
     Signature:  Alternative F => append :: F a -> F a -> F a
     """
-    pass
+    raise TypeError('Unable to locate implementation for (%s, %s)' % (Fa.__class__.__name__,
+                                                                      Fa2.__class__.__name__))

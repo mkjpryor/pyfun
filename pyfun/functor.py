@@ -23,4 +23,4 @@ def fmap(f, Fa):
     """
     Signature:  Functor F => fmap :: (a -> b) -> F a -> F b
     """
-    pass
+    raise TypeError('Unable to locate implementation for %s' % repr(Fa.__class__))

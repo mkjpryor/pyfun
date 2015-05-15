@@ -18,19 +18,19 @@ class Monad(applicative.Applicative):
 @infix
 @auto_bind
 @singledispatch(0)
-def bind(Ma, f):
+def flatmap(Ma, f):
     """
-    Signature:  Monad M => bind :: M a -> (a -> M b) -> M b
+    Signature:  Monad M => flatmap :: M a -> (a -> M b) -> M b
     """
-    pass
+    raise TypeError('Unable to locate implementation for %s' % repr(Ma.__class__))
 
 # monad.unit is applicative.unit
 unit = applicative.unit
 
 
-@applicative.apply.register(Monad)
-def apply(Mf, Ma):
-    return bind(Mf, lambda f: bind(Ma, lambda a: applicative.unit.resolve(Mf.__class__)(f(a))))
+@applicative.ap.register(Monad, Monad)
+def ap(Mf, Ma):
+    return Mf |flatmap| ( lambda f: Ma |flatmap| ( lambda a: unit.resolve(Mf.__class__)(f(a))))
 
 
 #########################################################################################

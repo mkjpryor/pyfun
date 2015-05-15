@@ -7,6 +7,9 @@ This module provides function decorators
 import functools
 from inspect import signature, Parameter as P
 
+from multipledispatch.core import ismethod
+from multipledispatch.dispatcher import Dispatcher, MethodDispatcher
+
 
 def auto_bind(f):
     """
@@ -62,27 +65,21 @@ def generic(f):
     
     The returned function cannot be invoked directly - the correct function should
     be obtained by using the resolve method and passing the required type
+    
+    The decorated function is used as the implementation for object, i.e. the implementation
+    that will be used if no specific implementations are registered for a type
     """
     # If the function is called directly, we want to tell people to use resolve
     def raise_generic_error(*args, **kwargs):
         raise RuntimeError('Generic functions cannot be invoked directly - ' +
                            'use resolve to find a type-specific implementation')
-    # Use a dummy function as the implementation for object
-    # We can then check to see if a better implementation has been provided for object
-    # by comparing the resolved value to this function
-    def dummy(*args, **kwargs): pass
     # We want to utilise all the effort that has gone into the dispatch algorithm
     # of functools.singledispatch
-    dispatcher = functools.singledispatch(dummy)
+    dispatcher = functools.singledispatch(f)
     # We can just use the register implementation directly
     raise_generic_error.register = dispatcher.register
-    # For resolve, we want to raise an error if we can't find an implementation
-    def resolve(the_type):
-        impl = dispatcher.dispatch(the_type)
-        if impl is dummy:
-            raise TypeError('Unable to locate implementation of %s for %s' % (f.__name__, repr(the_type)))
-        return impl
-    raise_generic_error.resolve = resolve
+    # Just rename the dispatcher's dispatch method to resolve
+    raise_generic_error.resolve = dispatcher.dispatch
     # Make the wrapper function look like the wrapped function before returning it
     functools.update_wrapper(raise_generic_error, f)
     return raise_generic_error
@@ -93,8 +90,8 @@ def singledispatch(n):
     Returns a decorator that allows the decorated function to do single dispatch
     on the type of the n-th *positional* argument (0-indexed)
     
-    The decorated function will never be invoked directly - if no implementation can
-    be found for the type of the n-th argument, an error will be raised
+    The decorated function will be used as the default implementation if no other
+    implementation can be found
     """
     def decorator(f):
         # Use a generic under the hood for dispatching
@@ -109,6 +106,30 @@ def singledispatch(n):
         functools.update_wrapper(dispatch_on_nth_arg, f)
         return dispatch_on_nth_arg
     return decorator
+
+
+def multipledispatch(f):
+    """
+    Decorator that allows multiple dispatch to be done on the given function with
+    registration similar to functools.singledispatch
+    
+    The decorated function is used as the default implementation if there are no
+    other matches
+    """
+    # Get an appropriate dispatcher
+    dispatcher = MethodDispatcher(f.__name__) if ismethod(f) else Dispatcher(f.__name__)
+    # Return a function that attempts to use the dispatcher, falling back on f
+    def dispatch_with_fallback(*args, **kwargs):
+        try:
+            return dispatcher(*args, **kwargs)
+        except NotImplementedError:
+            return f(*args, **kwargs)
+    # Attach functions to register and resolve implementations for particular types
+    dispatch_with_fallback.register = dispatcher.register
+    dispatch_with_fallback.resolve  = dispatcher.dispatch
+    # Make the returned function look like f
+    functools.update_wrapper(dispatch_with_fallback, f)
+    return dispatch_with_fallback
 
 
 def infix(f):
