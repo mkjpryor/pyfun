@@ -4,7 +4,7 @@ This module provides the monad and monad-plus types and associated operations
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-from pyfun.decorators import singledispatch, auto_bind, infix
+from pyfun.decorators import multipledispatch, auto_bind, infix
 from pyfun import applicative
 
 
@@ -17,7 +17,7 @@ class Monad(applicative.Applicative):
 
 @infix
 @auto_bind
-@singledispatch(0)
+@multipledispatch
 def flatmap(Ma, f):
     """
     Signature:  Monad M => flatmap :: M a -> (a -> M b) -> M b

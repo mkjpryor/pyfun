@@ -6,7 +6,7 @@ This module provides the functor type and associated operations
 
 import abc
 
-from pyfun.decorators import singledispatch, auto_bind, infix
+from pyfun.decorators import multipledispatch, auto_bind, infix
 
 
 class Functor(metaclass = abc.ABCMeta):
@@ -18,7 +18,7 @@ class Functor(metaclass = abc.ABCMeta):
 
 @infix
 @auto_bind
-@singledispatch(1)
+@multipledispatch
 def fmap(f, Fa):
     """
     Signature:  Functor F => fmap :: (a -> b) -> F a -> F b

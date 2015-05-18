@@ -9,7 +9,7 @@ import functools
 from pyfun import monad
 
 
-@monad.flatmap.register(list)
+@monad.flatmap.register(list, object)
 def flatmap(xs, f):
     return functools.reduce(lambda xs, x: xs + f(x), xs, [])
 

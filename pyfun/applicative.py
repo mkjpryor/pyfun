@@ -4,7 +4,7 @@ This module provides the applicative and alternative types and associated operat
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-from pyfun.decorators import singledispatch, generic, auto_bind, infix, multipledispatch
+from pyfun.decorators import generic, auto_bind, infix, multipledispatch
 from pyfun import functor
 
 
@@ -33,7 +33,7 @@ def unit(a):
     raise TypeError('Unable to locate type-specific implementation')
 
 
-@functor.fmap.register(Applicative)
+@functor.fmap.register(object, Applicative)
 def fmap(f, Fa):
     return unit.resolve(Fa.__class__)(f) |ap| Fa
 

@@ -17,7 +17,7 @@ import pyfun.iterable.tuple
 monad.MonadPlus.register(collections.Iterable)
 
 # Register generic iterable implementations
-@monad.flatmap.register(collections.Iterable)
+@monad.flatmap.register(collections.Iterable, object)
 def flatmap(xs, f):
     for x in xs:
         yield from f(x)

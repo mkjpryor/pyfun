@@ -74,38 +74,14 @@ def generic(f):
         raise RuntimeError('Generic functions cannot be invoked directly - ' +
                            'use resolve to find a type-specific implementation')
     # We want to utilise all the effort that has gone into the dispatch algorithm
-    # of functools.singledispatch
-    dispatcher = functools.singledispatch(f)
-    # We can just use the register implementation directly
+    # of the multipledispatch package
+    dispatcher = MethodDispatcher(f.__name__) if ismethod(f) else Dispatcher(f.__name__)
+    # Use the register implementation directly and rename dispatch to resolve
     raise_generic_error.register = dispatcher.register
-    # Just rename the dispatcher's dispatch method to resolve
-    raise_generic_error.resolve = dispatcher.dispatch
+    raise_generic_error.resolve  = dispatcher.dispatch
     # Make the wrapper function look like the wrapped function before returning it
     functools.update_wrapper(raise_generic_error, f)
     return raise_generic_error
-
-
-def singledispatch(n):
-    """
-    Returns a decorator that allows the decorated function to do single dispatch
-    on the type of the n-th *positional* argument (0-indexed)
-    
-    The decorated function will be used as the default implementation if no other
-    implementation can be found
-    """
-    def decorator(f):
-        # Use a generic under the hood for dispatching
-        dispatcher = generic(f)
-        # We want to return a function that uses the dispatcher to dispatch on the n-th arg
-        def dispatch_on_nth_arg(*args, **kwargs):
-            return dispatcher.resolve(args[n].__class__)(*args, **kwargs)
-        # Attach the register method from the dispatcher as a method on the function to
-        # allow the registering of specific implementations
-        dispatch_on_nth_arg.register = dispatcher.register
-        # Make the wrapper function look like the wrapped function before returning it
-        functools.update_wrapper(dispatch_on_nth_arg, f)
-        return dispatch_on_nth_arg
-    return decorator
 
 
 def multipledispatch(f):
@@ -118,15 +94,20 @@ def multipledispatch(f):
     """
     # Get an appropriate dispatcher
     dispatcher = MethodDispatcher(f.__name__) if ismethod(f) else Dispatcher(f.__name__)
-    # Return a function that attempts to use the dispatcher, falling back on f
+    # The function we return a function attempts to use the dispatcher, falling back on f
     def dispatch_with_fallback(*args, **kwargs):
         try:
             return dispatcher(*args, **kwargs)
         except NotImplementedError:
             return f(*args, **kwargs)
+    # When resolving, we want to use f as a fallback case as well
+    def resolve_with_fallback(*types):
+        return dispatcher.dispatch(*types) or f
     # Attach functions to register and resolve implementations for particular types
     dispatch_with_fallback.register = dispatcher.register
-    dispatch_with_fallback.resolve  = dispatcher.dispatch
+    dispatch_with_fallback.resolve  = resolve_with_fallback
+    # Add a default property that returns f
+    dispatch_with_fallback.default = property(lambda _: f)
     # Make the returned function look like f
     functools.update_wrapper(dispatch_with_fallback, f)
     return dispatch_with_fallback
