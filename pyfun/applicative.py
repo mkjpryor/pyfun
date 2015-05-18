@@ -12,7 +12,14 @@ class Applicative(functor.Functor):
     """
     The applicative type
     """
-    pass
+    
+    @classmethod
+    def __subclasshook__(cls, other):
+        """
+        Determines whether other is an applicative when using isinstance/issubclass
+        """
+        return ( ap.resolve(other, other) is not ap.default() and
+                 unit.resolve(other) is not None )
 
 
 @infix
@@ -46,7 +53,15 @@ class Alternative(Applicative):
     """
     The alternative type
     """
-    pass
+    
+    @classmethod
+    def __subclasshook__(cls, other):
+        """
+        Determines whether other is an applicative when using isinstance/issubclass
+        """
+        return ( Applicative.__subclasshook__(other) and
+                 append.resolve(other, other) is not append.default() and
+                 empty.resolve(other) is not None )
 
 
 @generic

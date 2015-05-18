@@ -13,9 +13,6 @@ import pyfun.iterable.list
 import pyfun.iterable.tuple
 
 
-# Register all iterables as being monad-plus
-monad.MonadPlus.register(collections.Iterable)
-
 # Register generic iterable implementations
 @monad.flatmap.register(collections.Iterable, object)
 def flatmap(xs, f):

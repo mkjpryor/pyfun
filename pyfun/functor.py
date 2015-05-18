@@ -13,7 +13,13 @@ class Functor(metaclass = abc.ABCMeta):
     """
     The functor type
     """
-    pass
+    
+    @classmethod
+    def __subclasshook__(cls, other):
+        """
+        Determines whether other is a functor when using isinstance/issubclass
+        """
+        return fmap.resolve(object, other) is not fmap.default()
 
 
 @infix

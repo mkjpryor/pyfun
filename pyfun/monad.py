@@ -12,7 +12,14 @@ class Monad(applicative.Applicative):
     """
     The monad type
     """
-    pass
+    
+    @classmethod
+    def __subclasshook__(cls, other):
+        """
+        Determines whether other is an applicative when using isinstance/issubclass
+        """
+        return ( flatmap.resolve(other, object) is not flatmap.default() and
+                 unit.resolve(other) is not None )
 
 
 @infix
@@ -41,7 +48,14 @@ class MonadPlus(Monad, applicative.Alternative):
     """
     The monad-plus type
     """
-    pass
+    
+    @classmethod
+    def __subclasshook__(cls, other):
+        """
+        Determines whether other is an applicative when using isinstance/issubclass
+        """
+        return ( Monad.__subclasshook__(other) and
+                 applicative.Alternative.__subclasshook__(other) )
 
 
 # MonadPlus requires the same functions as Applicative

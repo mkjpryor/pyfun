@@ -4,7 +4,7 @@ This module provides function decorators
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-import functools
+import functools, types
 from inspect import signature, Parameter as P
 
 from multipledispatch.core import ismethod
@@ -106,8 +106,8 @@ def multipledispatch(f):
     # Attach functions to register and resolve implementations for particular types
     dispatch_with_fallback.register = dispatcher.register
     dispatch_with_fallback.resolve  = resolve_with_fallback
-    # Add a default property that returns f
-    dispatch_with_fallback.default = property(lambda _: f)
+    # Add a default function that returns f
+    dispatch_with_fallback.default = types.MethodType(lambda _: f, dispatch_with_fallback)
     # Make the returned function look like f
     functools.update_wrapper(dispatch_with_fallback, f)
     return dispatch_with_fallback
