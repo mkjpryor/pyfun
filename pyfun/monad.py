@@ -37,7 +37,7 @@ unit = applicative.unit
 
 @applicative.ap.register(Monad, Monad)
 def ap(Mf, Ma):
-    return Mf |flatmap| ( lambda f: Ma |flatmap| ( lambda a: unit.resolve(Mf.__class__)(f(a))))
+    return Mf <<flatmap>> ( lambda f: Ma <<flatmap>> ( lambda a: unit.resolve(Mf.__class__)(f(a))))
 
 
 #########################################################################################

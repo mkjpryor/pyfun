@@ -42,7 +42,7 @@ def unit(a):
 
 @functor.fmap.register(object, Applicative)
 def fmap(f, Fa):
-    return unit.resolve(Fa.__class__)(f) |ap| Fa
+    return unit.resolve(Fa.__class__)(f) <<ap>> Fa
 
 
 #########################################################################################
