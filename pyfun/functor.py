@@ -6,27 +6,43 @@ This module provides the functor type and associated operations
 
 import abc
 
-from pyfun.decorators import multipledispatch, auto_bind, infix
+from .funcutils import auto_bind
 
 
-class Functor(metaclass = abc.ABCMeta):
+class Functor(abc.ABC):
     """
-    The functor type
+    The functor type for types that can be mapped over
     """
+
+    @abc.abstractmethod
+    def map(self, f):
+        """
+        Returns a functor 'containing' the result of applying `f` to the 'contents' of `self`
     
-    @classmethod
-    def __subclasshook__(cls, other):
+        Signature: `Functor F => F<a>.map :: (a -> b) -> F<b>`
         """
-        Determines whether other is a functor when using isinstance/issubclass
+        pass
+
+    def __rshift__(self, other):
         """
-        return fmap.resolve(object, other) is not fmap.default()
+        Alternative syntax for `map`: `Fa >> f == Fa.map(f)`
+        """
+        return self.map(other)
+        
+    def __rlshift__(self, other):
+        """
+        Alternative syntax for `map`: `f << Fa == Fa.map(f)`
+        """
+        return self.map(other)
 
 
-@infix
+## Functor operators
+
 @auto_bind
-@multipledispatch
-def fmap(f, Fa):
+def map(f, Fa):
     """
-    Signature:  Functor F => fmap :: (a -> b) -> F a -> F b
+    Returns a functor 'containing' the result of applying `f` to the 'contents' of `Fa`
+    
+    Signature: `Functor F => map :: (a -> b) -> F<a> -> F<b>`
     """
-    raise TypeError('Unable to locate implementation for %s' % repr(Fa.__class__))
+    return Fa >> f

@@ -4,37 +4,31 @@ This module provides utilities for manipulating functions
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-import functools
+import functools, inspect
+from inspect import Parameter as P
 
-from pyfun.decorators import infix
 
-
-@infix
-def compose(*funcs):
+def identity(x):
     """
-    Returns a new function that composes the given functions from right to left
-    
-    All functions except the last should be functions of a single argument
-    
-    E.g. the following are identical:
-     
-        h = compose(r, q, p)
-        h = lambda *args, **kwargs: r(q(p(*args, **kwargs)))
+    The identity function
     """
-    return chain(*reversed(funcs))
+    return x
 
 
-@infix
+def n_args(f):
+    """
+    Returns the number of **required positional** arguments of `f`
+    """
+    is_required_positional = lambda p: p.kind == P.POSITIONAL_OR_KEYWORD and p.default is P.empty
+    return len([p for p in inspect.signature(f).parameters.values() if is_required_positional(p)])
+
+
 def chain(*funcs):
     """
-    Returns a new function that composes the given functions from left to right
+    Returns a new function that is the composition of the given functions from left
+    to right, e.g. `chain(p, q, r) == lambda *args, **kwargs: r(q(p(*args, **kwargs)))`
     
     All functions except the first should be functions of a single argument
-    
-    E.g. the following are identical:
-     
-        h = chain(p, q, r)
-        h = lambda *args, **kwargs: r(q(p(*args, **kwargs)))
     """
     if not funcs:
         raise ValueError('At least one function must be given')
@@ -45,17 +39,26 @@ def chain(*funcs):
     return exec_chain
 
 
+def compose(*funcs):
+    """
+    Similar to chain except that the functions are composed from right to left
+    """
+    return chain(*reversed(funcs))
+
+
 # Create an object of some anonymous type to serve as a placeholder
 _ = type('', (object,), {})()
 def partial(f, *bound, **kwbound):
     """
-    Binds the first n arguments of f to the given arguments, returning a new function
-    that accepts the rest of the arguments before calling f
+    Binds the first `n` positional arguments of `f` to the given arguments, returning a
+    new function that accepts the rest of the arguments before calling `f`
     
-    When binding arguments, the placeholder _ (underscore) can be given to indicate that
+    When binding arguments, the placeholder `_` (underscore) can be given to indicate that
     the argument will be filled later
     
     E.g. to bind the first and third arguments of a function:
+    
+        from pyfun.funcutils import partial, _
     
         def add(a, b, c):
             return a + b + c
@@ -86,53 +89,63 @@ def partial(f, *bound, **kwbound):
     return func
 
 
-class MatchError(RuntimeError):
+def auto_bind(f):
     """
-    Error representing a failure to match a case
-    """
-    pass
-
-def match(*cases):
-    """
-    This function emulates the match statement from functional languages
+    Allows for the automatic binding of **required positional arguments** to `f`,
+    only calling `f` when all required positional arguments have a value
     
-    Each case is a tuple of (matcher, function) where:
-        function is only called if the matcher passes
-        matcher is one of:
-          * A single type
-              * In this case, the match will only succeed if exactly one argument of the
-                correct type is given when the match expression is called
-          * A tuple of types, one per argument
-              * In this case, a tuple can be given as an element to represent a union over types
-          * A predicate, which will receive all the arguments which the match expression
-            is called with
-          * None, indicating a default case that will always match
-          
-    Cases are evaluated in the order in which they are given, with the first match being
-    executed
-    """
-    # Transform any types or tuples of types into predicates
-    cases = list(cases)
-    for i, c in enumerate(cases):
-        if c[0] is None:
-            cases[i] = (lambda *args, **kwargs: True, c[1])
-            continue
-        if isinstance(c[0], type):
-            c = ((c[0],), c[1])
-        if isinstance(c[0], tuple):
-            cases[i] = (__to_predicate(*c[0]), c[1])
-    # Return a function that selects the first matching case and executes it
-    def select(*args, **kwargs):
-        for p, f in cases:
-            if p(*args, **kwargs):
-                return f(*args, **kwargs)
-        raise MatchError('Could not find suitable match')
-    return select
+    The placeholder `_` can be given to indicate that the argument will be provided
+    in a later call
+    
+    If binding of optional positional arguments, as well as required ones, is 
+    needed, `auto_bind_n` should be used instead
+    
+    This function can be used as a decorator, e.g.:
+    
+        from pyfun.funcutils import auto_bind
 
-def __to_predicate(*types):
+        @auto_bind
+        def add(a, b, c):
+            return a + b + c
+        
+        print(add(1, 2, 3))     # Prints 6
+        print(add(1, 2)(3))     # Prints 6
+        print(add(1)(2, 3))     # Prints 6
+        print(add(1)(2)(3))     # Prints 6
+        print(add(_, 2)(1, 3))  # Prints 6
     """
-    Converts a set of types into a predicate that tests the given arguments against those types
+    return auto_bind_n(n_args(f), f)    
+
+
+def auto_bind_n(n, f = None, bound = ()):
     """
-    def match_types(*args):
-        return len(types) == len(args) and all(isinstance(a, t) for a, t in zip(args, types))
-    return match_types
+    Returns a decorator that automatically binds `n` **positional** arguments of `f`
+    
+    If `f` is not given, this function returns a function that can be used as a decorator
+    """
+    if not f:
+        def decorator(g):
+            return auto_bind_n(n, g, bound)
+        return decorator
+
+    def backfill_args(*args):
+        args = list(args)
+        args_use = list(bound)
+        # Merge args with the already bound arguments, observing placeholders
+        for i, item in enumerate(args_use):
+            if not args: break
+            if item is _: args_use[i] = args.pop(0)
+        args_use.extend(args)
+        # If we have enough arguments to call f and return a value, do it
+        if len(args_use) >= n and not any(a is _ for a in args_use[:n]): return f(*args_use[:n])
+        # If no arguments were given, just return f
+        # NOTE: The case where n = 0 is dealt with above
+        if not args_use: return f
+        # Otherwise, we want to continue to bind arguments
+        return auto_bind_n(n, f, tuple(args_use))
+    # Set a flag we can use to test if the function is auto-bound
+    backfill_args.__autobound__ = True
+    # Before returning it, update the wrapper function to look like the
+    # wrapped function
+    functools.update_wrapper(backfill_args, f)
+    return backfill_args

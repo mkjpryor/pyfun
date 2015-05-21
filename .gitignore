@@ -64,4 +64,8 @@ nbproject
 .pydevproject
 
 # Test files
-/test*.py
+main.py
+test*.py
+
+# Zed files
+.zedstate

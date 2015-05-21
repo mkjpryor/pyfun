@@ -4,60 +4,79 @@ This module provides the monad and monad-plus types and associated operations
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-from pyfun.decorators import multipledispatch, auto_bind, infix
-from pyfun import applicative
+import abc
+
+from .funcutils import auto_bind, identity
+from .applicative import Applicative, Alternative
 
 
-class Monad(applicative.Applicative):
+class Monad(Applicative):
     """
-    The monad type
+    The monad type, best thought of as an abstract datatype of actions
     """
+
+    @abc.abstractmethod
+    def flatmap(self, f):
+        """
+        Sequentially compose two actions, using the result from the first as input
+        to the second
+        
+        Signature:  `Monad M => M<a>.flatmap :: (a -> M<b>) -> M<b>`
+        """
+        pass
     
-    @classmethod
-    def __subclasshook__(cls, other):
+    def ap(self, other):
+        return self >= (lambda f: other >= (lambda a: self.__class__.unit(f(a))))
+        
+    def __ge__(self, other):
         """
-        Determines whether other is an applicative when using isinstance/issubclass
+        Alternative syntax for `flatmap`: `Ma >= f == f <= Ma == Ma.flatmap(f)`
         """
-        return ( flatmap.resolve(other, object) is not flatmap.default() and
-                 unit.resolve(other) is not None )
+        return self.flatmap(other)
+    
 
+# Monad operators
 
-@infix
 @auto_bind
-@multipledispatch
 def flatmap(Ma, f):
     """
-    Signature:  Monad M => flatmap :: M a -> (a -> M b) -> M b
+    Sequentially compose two actions, using the result from the first as input
+    to the second
+        
+    Signature: `Monad M => flatmap :: M<a> -> (a -> M<b>) -> M<b>`
     """
-    raise TypeError('Unable to locate implementation for %s' % repr(Ma.__class__))
-
-# monad.unit is applicative.unit
-unit = applicative.unit
+    return Ma >= f
 
 
-@applicative.ap.register(Monad, Monad)
-def ap(Mf, Ma):
-    return Mf <<flatmap>> ( lambda f: Ma <<flatmap>> ( lambda a: unit.resolve(Mf.__class__)(f(a))))
-
-
-#########################################################################################
-#########################################################################################
-
-
-class MonadPlus(Monad, applicative.Alternative):
+def join(Ma):
     """
-    The monad-plus type
-    """
+    Removes a layer of monadic structure
     
-    @classmethod
-    def __subclasshook__(cls, other):
-        """
-        Determines whether other is an applicative when using isinstance/issubclass
-        """
-        return ( Monad.__subclasshook__(other) and
-                 applicative.Alternative.__subclasshook__(other) )
+    Signature: `Monad M => join :: M<M<a>> -> M<a>`
+    """
+    return Ma >= identity
 
 
-# MonadPlus requires the same functions as Applicative
-empty  = applicative.empty
-append = applicative.append
+#########################################################################################
+#########################################################################################
+
+
+class MonadPlus(Monad, Alternative):
+    """
+    The monad-plus type, for a monad that supports success and failure
+    """
+    pass
+
+
+# MonadPlus operators
+
+def filter(p, Ma):
+    """
+    Generic MonadPlus equivalent of filter for lists
+    
+    Signature: `MonadPlus M => filter :: (a -> bool) -> M<a> -> M<a>`
+    """
+    unit = Ma.__class__.unit
+    empty = Ma.__class__.empty
+    return Ma >= (lambda a: unit(a) if p(a) else empty())
+    

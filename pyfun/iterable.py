@@ -1,48 +1,34 @@
 """
-This module implements several type-classes for the built-in sequence types
+This module implements several type-classes for iterables
 
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-import collections, functools
+import collections, itertools
 
-from pyfun import monad
-
-
-# Register generic iterable implementations
-@monad.flatmap.register(collections.Iterable, object)
-def flatmap(xs, f):
-    for x in xs:
-        yield from f(x)
-
-@monad.unit.register(collections.Iterable)
-def unit(a):
-    yield a
-
-@monad.empty.register(collections.Iterable)
-def empty():
-    yield from ()
-
-@monad.append.register(collections.Iterable, collections.Iterable)
-def append(xs, ys):
-    yield from xs
-    yield from ys
+from .monad import MonadPlus
 
 
-# Register list-specific implementations
-monad.flatmap.register(list, object)(
-    lambda xs, f: functools.reduce(lambda xs, x: xs + f(x), xs, [])
-)
-monad.unit.register(list)(lambda a: [a])
-monad.empty.register(list)(list)
-monad.append.register(list, list)(lambda xs, ys: xs + ys)
-
-
-# Register tuple-specific implementations
-monad.flatmap.register(tuple, object)(
-    lambda xs, f: functools.reduce(lambda xs, x: xs + f(x), xs, ())
-)
-monad.unit.register(tuple)(lambda a: (a,))
-monad.empty.register(tuple)(tuple)
-monad.append.register(tuple, tuple)(lambda xs, ys: xs + ys)
-
+class Iterable(collections.Iterable, MonadPlus):
+    def __init__(self, iterable):
+        self.__iter = iter(iterable)
+        
+    def __iter__(self):
+        # In order to be repeatedly iterable, we must tee our iterator every
+        # time a new iterator is requested 
+        self.__iter, iter = itertools.tee(self.__iter)
+        return iter
+        
+    def binop(self, other):
+        return Iterable(itertools.chain(self, other))
+    
+    @staticmethod
+    def empty():
+        return Iterable(())
+        
+    def flatmap(self, f):
+        return Iterable(x for xs in self for x in f(xs))
+    
+    @staticmethod
+    def unit(a):
+        return Iterable((a,))

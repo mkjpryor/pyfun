@@ -4,45 +4,106 @@ This module provides the applicative and alternative types and associated operat
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-from pyfun.decorators import generic, auto_bind, infix, multipledispatch
-from pyfun import functor
+import abc, functools
+
+from .funcutils import auto_bind, auto_bind_n, n_args
+from .functor import Functor
 
 
-class Applicative(functor.Functor):
+class Applicative(Functor):
     """
-    The applicative type
+    The applicative type, a functor with application
     """
     
-    @classmethod
-    def __subclasshook__(cls, other):
+    @abc.abstractmethod
+    def ap(self, other):
         """
-        Determines whether other is an applicative when using isinstance/issubclass
+        Perform computation inside the applicative structure
+        
+        Signature:  `Applicative F => F<(a -> b)>.ap :: F<a> -> F<b>`
         """
-        return ( ap.resolve(other, other) is not ap.default() and
-                 unit.resolve(other) is not None )
+        pass
 
+    @staticmethod
+    @abc.abstractmethod
+    def unit(a):
+        """
+        Lifts a value into the applicative structure
+        
+        Signature: `Applicative F => unit :: a -> F<a>`
+        """
+        pass
 
-@infix
+    def __xor__(self, other):
+        """
+        Alternative syntax for `ap`: `Ff ^ Fa == Ff.ap(Fa)`
+        """
+        return self.ap(other)
+    
+    def map(self, f):
+        return self.__class__.unit(f) ^ self
+    
+    
+## Applicative operators
+
 @auto_bind
-@multipledispatch
 def ap(Ff, Fa):
     """
-    Signature:  Applicative F => ap :: F (a -> b) -> F a -> F b
+    Perform computation inside the applicative structure
+        
+    Signature: `Applicative F => ap :: F<(a -> b)> -> F<a> -> F<b>`
     """
-    raise TypeError('Unable to locate implementation for (%s, %s)' % (Ff.__class__.__name__,
-                                                                      Fa.__class__.__name__))
-
-@generic
-def unit(a):
-    """
-    Signature: Applicative F => unit :: a -> F a
-    """
-    raise TypeError('Unable to locate type-specific implementation')
+    return Ff ^ Fa
 
 
-@functor.fmap.register(object, Applicative)
-def fmap(f, Fa):
-    return unit.resolve(Fa.__class__)(f) <<ap>> Fa
+@auto_bind
+def unit(cls, a):
+    """
+    Lifts a value into the applicative structure for `cls`
+        
+    Signature: `Applicative F => unit :: F -> a -> F<a>`
+    """
+    return cls.unit(a)
+
+
+def lift(f):
+    """
+    Lifts `f` into a function over applicatives
+    
+    The returned function is auto-bound
+    
+    NOTE: This function only considers the **required positional** arguments of `f`
+          For lifting functions with optional positional arguments, see `lift_n`
+        
+    This method can be used as a decorator
+        
+    Signature: `Applicative F => lift :: (a1 -> a2 -> ... -> r) -> F<a1> -> F<a2> -> ... -> F<r>`
+    """
+    return lift_n(n_args(f), f)
+
+
+@auto_bind
+def lift_n(n, f):
+    """
+    Lifts `n` arguments of the given function into a function over applicatives
+        
+    If only `n` is given, another function is returned that can be used as a decorator
+
+    Signature: `Applicative F => lift_n :: int -> (a1 -> a2 -> ... aN -> r) -> F<a1> -> F<a2> -> ... F<aN> -> F<r>`
+    """
+    # Auto-bind f for n arguments, so we can call it with an argument and get a
+    # function accepting the rest of the arguments back
+    f = auto_bind_n(n, f)
+    
+    def lifted(*args):
+        # If no arguments are given, just call f with no args
+        # Otherwise, use the first argument to work out what applicative to lift the
+        # function into before using ap to sequence the computation
+        return functools.reduce(ap, args, args[0].__class__.unit(f)) if args else f()
+    # Update argspec, etc. to look like f
+    functools.update_wrapper(lifted, f)
+    # Auto-bind the lifted function for n arguments
+    return auto_bind_n(n, lifted)
 
 
 #########################################################################################
@@ -51,32 +112,50 @@ def fmap(f, Fa):
 
 class Alternative(Applicative):
     """
-    The alternative type
+    The alternative type, a monoid on applicatives
     """
+
+    @abc.abstractmethod
+    def binop(self, other):
+        """
+        An associative binary operation
+        
+        Signature: `Alternative F => F<a>.binop :: F<a> -> F<a>`
+        """
+        pass
     
-    @classmethod
-    def __subclasshook__(cls, other):
+    @staticmethod
+    @abc.abstractmethod
+    def empty():
         """
-        Determines whether other is an applicative when using isinstance/issubclass
+        The identity of `binop`
+        
+        Signature: `Alternative F => empty :: F<a>`
         """
-        return ( Applicative.__subclasshook__(other) and
-                 append.resolve(other, other) is not append.default() and
-                 empty.resolve(other) is not None )
+        pass
+    
+    def __or__(self, other):
+        """
+        Alternative syntax for `binop`: `Fa | Fb == Fa.binop(Fb)`
+        """
+        return self.binop(other)
+    
+    
+## Alternative operators
 
-
-@generic
-def empty():
-    """
-    Signature: Alternative F => empty :: F a
-    """
-    raise TypeError('Unable to locate type-specific implementation')
-
-@infix
 @auto_bind
-@multipledispatch
-def append(Fa, Fa2):
+def binop(Fa, Fother):
     """
-    Signature:  Alternative F => append :: F a -> F a -> F a
+    An associative binary operation
+       
+    Signature: `Alternative F => binop :: F<a> -> F<a> -> F<a>`
     """
-    raise TypeError('Unable to locate implementation for (%s, %s)' % (Fa.__class__.__name__,
-                                                                      Fa2.__class__.__name__))
+    return Fa | Fother
+
+def empty(cls):
+    """
+    The identity of `binop`
+        
+    Signature: `Alternative F => empty :: F -> F<a>`
+    """
+    return cls.empty()
