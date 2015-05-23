@@ -4,45 +4,33 @@ This module provides the functor type and associated operations
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-import abc
+import abc, collections
 
-from .funcutils import auto_bind
+from .funcutils import auto_bind, singledispatch
 
 
+# We derive from ABC purely for the convenience of __subclasshook__ (as opposed to defining
+# our own metaclasses to use __(subclass|instance)check__
 class Functor(abc.ABC):
     """
     The functor type for types that can be mapped over
+    
+    A type becomes a functor by providing an implementation for map
     """
 
-    @abc.abstractmethod
-    def map(self, f):
-        """
-        Returns a functor 'containing' the result of applying `f` to the 'contents' of `self`
-    
-        Signature: `Functor F => F<a>.map :: (a -> b) -> F<b>`
-        """
-        pass
-
-    def __rshift__(self, other):
-        """
-        Alternative syntax for `map`: `Fa >> f == Fa.map(f)`
-        """
-        return self.map(other)
-        
-    def __rlshift__(self, other):
-        """
-        Alternative syntax for `map`: `f << Fa == Fa.map(f)`
-        """
-        return self.map(other)
+    @classmethod
+    def __subclasshook__(cls, other):
+        return map.resolve(other) is not map.default
 
 
 ## Functor operators
 
 @auto_bind
-def map(f, Fa):
+@singledispatch(1)
+def map(f: collections.Callable, Fa: Functor) -> Functor:
     """
     Returns a functor 'containing' the result of applying `f` to the 'contents' of `Fa`
     
     Signature: `Functor F => map :: (a -> b) -> F<a> -> F<b>`
     """
-    return Fa >> f
+    raise TypeError('Not implemented for %s' % type(Fa).__name__)

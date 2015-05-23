@@ -5,6 +5,7 @@ This module provides utilities for manipulating functions
 """
 
 import functools, inspect
+from itertools import islice
 from inspect import Parameter as P
 
 from multipledispatch.core import ismethod
@@ -217,13 +218,10 @@ def auto_bind_n(n, f = None, bound = ()):
 def generic(f):
     """
     Decorator that marks the decorated function as generic, and allows implementations
-    to be registered for particular types
+    to be registered for a particular type
     
     The returned function cannot be invoked directly - the correct function should
     be obtained by using the resolve method and passing the required type
-    
-    The decorated function is used as the implementation for object, i.e. the implementation
-    that will be used if no specific implementations are registered for a type
     
     >>> from collections import Iterable
     >>> @generic
@@ -249,109 +247,86 @@ def generic(f):
     'ITERABLE'
     >>> func.resolve(list)()
     'LIST'
-    >>> func.resolve(float)
-    Traceback (most recent call last):
-        ...
-    RuntimeError: No implementation registered for (float)
+    >>> print(func.resolve(float))
+    None
     """
     # If the function is called directly, we want to tell people to use resolve
     def raise_generic_error(*args, **kwargs):
         raise RuntimeError('Generic functions cannot be invoked directly')
     # We want to utilise all the effort that has gone into the dispatch algorithm
-    # of the multipledispatch package
-    dispatcher = MethodDispatcher(f.__name__) if ismethod(f) else Dispatcher(f.__name__)
-    # Use the register implementation directly and rename dispatch to resolve
+    # of functools.singledispatch, so use that as our dispatcher
+    dispatcher = functools.singledispatch(raise_generic_error)
     raise_generic_error.register = dispatcher.register
-    # We want to issue our own error on failed resolve, rather than talking about signature
-    def resolve_for_types(*types):
-        impl = dispatcher.dispatch(*types)
-        if not impl:
-            raise RuntimeError(
-                'No implementation registered for (%s)' % ', '.join(t.__name__ for t in types))
-        return impl
-    raise_generic_error.resolve  = resolve_for_types
+    # We want to return None rather than raise_generic_error if no specific implementation
+    # is found
+    def _dispatch(t):
+        impl = dispatcher.dispatch(t)
+        return impl if impl is not raise_generic_error else None
+    raise_generic_error.resolve = _dispatch
     # Make the wrapper function look like the wrapped function before returning it
     functools.update_wrapper(raise_generic_error, f)
     return raise_generic_error
 
 
-def multipledispatch(f):
+@auto_bind
+def singledispatch(n, f):
     """
-    Returns a new function that performs multiple dispatch based on the types given in the
-    parameter annotations
+    Returns a new function that dispatches to registered implementations based on the
+    type of the n-th argument
     
-    Implementations are registered using the register method of the returned callable
+    Implementations are registered using the register method of the returned callable,
+    with the type being picked up from the annotation of the argument being dispatched on
     
-    The decorated function is used as the default implementation if there are no other
-    matches, regardless of annotations
+    f is used as the default implementation if there are no other matches, regardless
+    of annotations
     
-    Multiple dispatch can only be used on functions with *no optional or keyword arguments*
+    Can only be used to dispatch on positional arguments
     
-    >>> @multipledispatch
-    ... def add(a, b, *others): pass
+    >>> from collections import Iterable
+    >>> @singledispatch(1)
+    ... def add(a, b, c): raise TypeError('No implementation for %s' % type(b).__name__)
     ...
-    Traceback (most recent call last):
-        ...
-    ValueError: Multiple dispatch not allowed with optional or keyword arguments
-    >>> @multipledispatch
-    ... def add(a, b, c): raise TypeError('No implementation for %s' % type(a).__name__)
-    ...
-    >>> @add.register
+    >>> @add.register(int)
     ... def add_int(a: int, b: int, c: int) -> int: return a + b + c
     ...
-    >>> @add.register
-    ... def add_str(a: str, b: str, c: str) -> str: return a + b + c
+    >>> @add.register(Iterable)
+    ... def add_iter(a: Iterable, b: Iterable, c: Iterable) -> Iterable: return a + b + c
     ...
     >>> add(1, 2, 3)
     6
     >>> add("1", "2", "3")
     '123'
+    >>> add((1,), (2,), (3,))
+    (1, 2, 3)
     >>> add(1.0, 2.0, 3.0)
     Traceback (most recent call last):
         ...
     TypeError: No implementation for float
     """
-    # If f has any optional or keyword arguments, raise an error
-    for p in inspect.signature(f).parameters.values():
-        if p.kind == P.POSITIONAL_OR_KEYWORD and p.default is P.empty:
-            continue
-        raise ValueError('Multiple dispatch not allowed with optional or keyword arguments')
-    # Get an appropriate dispatcher
-    dispatcher = MethodDispatcher(f.__name__) if ismethod(f) else Dispatcher(f.__name__)
-    # Return a function that attempts to use the dispatcher, falling back on f
-    def dispatch_with_fallback(*args, **kwargs):
-        try:
-            return dispatcher(*args, **kwargs)
-        except NotImplementedError:
-            return f(*args, **kwargs)
+    # We want to utilise all the effort that has gone into the dispatch algorithm
+    # of functools.singledispatch, so use that as our dispatcher
+    dispatcher = functools.singledispatch(f)
+    # Return a function that dispatches on the type of the n-th argument
+    def dispatch_on_nth(*args, **kwargs):
+        return dispatcher.dispatch(type(args[n]))(*args, **kwargs)
     # When registering, we want to use the annotations
-    def register_with_annotations(impl):
-        # Construct the types array by inspecting the annotations
-        types = []
-        for p in inspect.signature(impl).parameters.values():
-            # Just like f, if impl has any optional or keyword arguments, raise an error
-            if not __is_required_positional(p):
-                raise ValueError('Multiple dispatch not allowed with optional or keyword arguments')
-            # If there is no annotation, use object as the type
-            if p.annotation is P.empty:
-                types.append(object)
-            # If the annotation is not a type, raise an error
-            elif not isinstance(p.annotation, type):
-                raise TypeError('Multiple dispatch expects annotations to be types')
-            # Otherwise, use the annotated type
-            else:
-                types.append(p.annotation)
-        dispatcher.register(*types)(impl)
-    dispatch_with_fallback.register = register_with_annotations
-    # When resolving, we want to use f as a fallback case
-    def resolve_with_fallback(*types):
-        return dispatcher.dispatch(*types) or f
-    dispatch_with_fallback.resolve  = resolve_with_fallback
+    def register_by_annotation(impl):
+        # We want to get the annotation of the n-th argument
+        annotation = next(islice(inspect.signature(impl).parameters.values(), n, None)).annotation
+        # If there is no annotation or the annotation is not a type, raise an error
+        if annotation is P.empty:
+            raise TypeError('Argument %d must have a type annotation for dispatching' % n)
+        elif not isinstance(annotation, type):
+            raise TypeError('Annotation for dispatching must be a type')
+        # Otherwise, use the annotated type
+        dispatcher.register(annotation)(impl)
+    dispatch_on_nth.register = register_by_annotation
+    dispatch_on_nth.resolve  = dispatcher.dispatch
     # Add a default property that returns f
-    dispatch_with_fallback.default = f
+    dispatch_on_nth.default = f
     # Make the returned function look like f
-    functools.update_wrapper(dispatch_with_fallback, f)
-    return dispatch_with_fallback
+    functools.update_wrapper(dispatch_on_nth, f)
+    return dispatch_on_nth
 
 
 def infix(f):

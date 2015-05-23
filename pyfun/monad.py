@@ -4,79 +4,78 @@ This module provides the monad and monad-plus types and associated operations
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-import abc
+import abc, collections
 
-from .funcutils import auto_bind, identity
-from .applicative import Applicative, Alternative
+from .funcutils import identity, auto_bind, singledispatch
+from .applicative import Alternative, ap, unit, binop, empty
 
 
-class Monad(Applicative):
+class Monad(abc.ABC):
     """
     The monad type, best thought of as an abstract datatype of actions
+    
+    A type becomes a monad by providing implementions for flatmap and unit
     """
 
-    @abc.abstractmethod
-    def flatmap(self, f):
-        """
-        Sequentially compose two actions, using the result from the first as input
-        to the second
-        
-        Signature:  `Monad M => M<a>.flatmap :: (a -> M<b>) -> M<b>`
-        """
-        pass
-    
-    def ap(self, other):
-        return self >= (lambda f: other >= (lambda a: self.__class__.unit(f(a))))
-        
-    def __ge__(self, other):
-        """
-        Alternative syntax for `flatmap`: `Ma >= f == f <= Ma == Ma.flatmap(f)`
-        """
-        return self.flatmap(other)
-    
+    @classmethod
+    def __subclasshook__(cls, other):
+        return flatmap.resolve(other) is not flatmap.default and unit.resolve(other) is not None
+
 
 # Monad operators
 
 @auto_bind
-def flatmap(Ma, f):
+@singledispatch(0)
+def flatmap(Ma: Monad, f: collections.Callable) -> Monad:
     """
     Sequentially compose two actions, using the result from the first as input
     to the second
         
     Signature: `Monad M => flatmap :: M<a> -> (a -> M<b>) -> M<b>`
     """
-    return Ma >= f
+    raise TypeError('Not implemented for %s' % type(Ma).__name__)
 
 
-def join(Ma):
+@ap.register
+def _ap(Mf: Monad, Ma: Monad) -> Monad:
+    return flatmap(Mf, lambda f: flatmap(Ma, lambda a: unit.resolve(type(Ma))(f(a))))
+
+
+@singledispatch(0)
+def join(Ma: Monad) -> Monad:
     """
     Removes a layer of monadic structure
     
     Signature: `Monad M => join :: M<M<a>> -> M<a>`
     """
-    return Ma >= identity
+    return flatmap(Ma, identity)
 
 
 #########################################################################################
 #########################################################################################
 
 
-class MonadPlus(Monad, Alternative):
+class MonadPlus(abc.ABC):
     """
     The monad-plus type, for a monad that supports success and failure
+    
+    A type becomes a monad-plus by being a monad and an alternative
     """
-    pass
+
+    @classmethod
+    def __subclasshook__(cls, other):
+        return issubclass(other, Monad) and issubclass(other, Alternative)
 
 
 # MonadPlus operators
 
-def filter(p, Ma):
+@auto_bind
+@singledispatch(1)
+def filter(p: collections.Callable, Ma: MonadPlus) -> MonadPlus:
     """
     Generic MonadPlus equivalent of filter for lists
     
     Signature: `MonadPlus M => filter :: (a -> bool) -> M<a> -> M<a>`
     """
-    unit = Ma.__class__.unit
-    empty = Ma.__class__.empty
-    return Ma >= (lambda a: unit(a) if p(a) else empty())
+    return flatmap(Ma, lambda a: unit.resolve(type(Ma))(a) if p(a) else empty.resolve(type(Ma))())
     
