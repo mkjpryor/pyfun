@@ -338,6 +338,7 @@ def multipledispatch(f):
             else:
                 types.append(p.annotation)
         dispatcher.register(*types)(impl)
+        return impl
     dispatch_with_fallback.register = register_with_annotations
     # When resolving, we want to use f as a fallback case
     def resolve_with_fallback(*types):
