@@ -6,6 +6,7 @@ This module defines the Maybe type for cleanly representing the absence of a val
 
 from collections import Callable, Iterable
 
+from .funcutils import auto_bind
 from .monad import flatmap, unit, binop, empty
 
 
@@ -65,6 +66,7 @@ def unwrap(x: Maybe):
         raise TypeError('Cannot unwrap Nothing')
     
 
+@auto_bind
 def unwrap_or(default, x: Maybe):
     """
     If x is a Just, returns the wrapped value
@@ -73,6 +75,7 @@ def unwrap_or(default, x: Maybe):
     return unwrap(x) if x else default
 
     
+@auto_bind
 def unwrap_or_else(f: Callable, x: Maybe):
     """
     If x is a Just, returns the wrapped value
