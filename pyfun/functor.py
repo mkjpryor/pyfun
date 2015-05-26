@@ -6,7 +6,7 @@ This module provides the functor type and associated operations
 
 import abc, collections
 
-from .funcutils import auto_bind, singledispatch
+from .funcutils import auto_bind, multipledispatch
 
 
 # We derive from ABC purely for the convenience of __subclasshook__ (as opposed to defining
@@ -20,13 +20,13 @@ class Functor(abc.ABC):
 
     @classmethod
     def __subclasshook__(cls, other):
-        return map.resolve(other) is not map.default
+        return map.resolve(collections.Callable, other) is not map.default
 
 
 ## Functor operators
 
 @auto_bind
-@singledispatch(1)
+@multipledispatch
 def map(f: collections.Callable, Fa: Functor) -> Functor:
     """
     Returns a functor 'containing' the result of applying `f` to the 'contents' of `Fa`

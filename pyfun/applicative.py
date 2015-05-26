@@ -6,7 +6,7 @@ This module provides the applicative and alternative types and associated operat
 
 import abc, functools
 
-from .funcutils import n_args, auto_bind, auto_bind_n, generic, singledispatch
+from .funcutils import n_args, auto_bind, auto_bind_n, generic, multipledispatch
 from .functor import map
 
 
@@ -19,13 +19,13 @@ class Applicative(abc.ABC):
 
     @classmethod
     def __subclasshook__(cls, other):
-        return ap.resolve(other) is not ap.default and unit.resolve(other) is not None
+        return ap.resolve(other, other) is not ap.default and unit.resolve(other) is not None
     
         
 ## Applicative operators
 
 @auto_bind
-@singledispatch(0)
+@multipledispatch
 def ap(Ff: Applicative, Fa: Applicative) -> Applicative:
     """
     Perform computation inside the applicative structure
@@ -105,14 +105,14 @@ class Alternative(abc.ABC):
     @classmethod
     def __subclasshook__(cls, other):
         return issubclass(other, Applicative) and \
-               binop.resolve(other) is not binop.default and \
+               binop.resolve(other, other) is not binop.default and \
                empty.resolve(other) is not None    
     
 
 ## Alternative operators
 
 @auto_bind
-@singledispatch(0)
+@multipledispatch
 def binop(Fa: Alternative, Fother: Alternative) -> Alternative:
     """
     An associative binary operation

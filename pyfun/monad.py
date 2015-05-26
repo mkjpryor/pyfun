@@ -6,7 +6,7 @@ This module provides the monad and monad-plus types and associated operations
 
 import abc, collections
 
-from .funcutils import identity, auto_bind, singledispatch
+from .funcutils import identity, auto_bind, multipledispatch
 from .applicative import Alternative, ap, unit, binop, empty
 
 
@@ -19,13 +19,14 @@ class Monad(abc.ABC):
 
     @classmethod
     def __subclasshook__(cls, other):
-        return flatmap.resolve(other) is not flatmap.default and unit.resolve(other) is not None
+        return flatmap.resolve(other, collections.Callable) is not flatmap.default \
+               and unit.resolve(other) is not None
 
 
 # Monad operators
 
 @auto_bind
-@singledispatch(0)
+@multipledispatch
 def flatmap(Ma: Monad, f: collections.Callable) -> Monad:
     """
     Sequentially compose two actions, using the result from the first as input
@@ -41,7 +42,7 @@ def _ap(Mf: Monad, Ma: Monad) -> Monad:
     return flatmap(Mf, lambda f: flatmap(Ma, lambda a: unit.resolve(type(Ma))(f(a))))
 
 
-@singledispatch(0)
+@multipledispatch
 def join(Ma: Monad) -> Monad:
     """
     Removes a layer of monadic structure
@@ -70,7 +71,7 @@ class MonadPlus(abc.ABC):
 # MonadPlus operators
 
 @auto_bind
-@singledispatch(1)
+@multipledispatch
 def filter(p: collections.Callable, Ma: MonadPlus) -> MonadPlus:
     """
     Generic MonadPlus equivalent of filter for lists
