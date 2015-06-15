@@ -6,77 +6,48 @@ This module provides the monad and monad-plus types and associated operations
 
 import abc, collections
 
-from .funcutils import identity, auto_bind, multipledispatch
-from .applicative import Alternative, ap, unit, binop, empty
+from .funcutils import identity, auto_bind
+from .applicative import Applicative, Alternative
 
 
-class Monad(abc.ABC):
+class Monad(Applicative):
     """
     The monad type, best thought of as an abstract datatype of actions
-    
-    A type becomes a monad by providing implementions for flatmap and unit
     """
 
-    @classmethod
-    def __subclasshook__(cls, other):
-        return flatmap.resolve(other, collections.Callable) is not flatmap.default \
-               and unit.resolve(other) is not None
+    def flatmap(self, f: collections.Callable) -> Monad:
+        """
+        Sequentially compose two actions, using the result from the first as input
+        to the second
+            
+        Signature: `Monad M => M<a>.flatmap :: (a -> M<b>) -> M<b>`
+        """
 
+    def ap(self, Ma: Monad) -> Monad:
+        return self.flatmap(lambda f: Ma.flatmap(lambda a: self.__class__.unit(f(a))))
 
-# Monad operators
-
-@auto_bind
-@multipledispatch
-def flatmap(Ma: Monad, f: collections.Callable) -> Monad:
-    """
-    Sequentially compose two actions, using the result from the first as input
-    to the second
+    def join(self) -> Monad:
+        """
+        Removes a layer of monadic structure
         
-    Signature: `Monad M => flatmap :: M<a> -> (a -> M<b>) -> M<b>`
-    """
-    raise TypeError('Not implemented for %s' % type(Ma).__name__)
-
-
-@ap.register
-def _ap(Mf: Monad, Ma: Monad) -> Monad:
-    return flatmap(Mf, lambda f: flatmap(Ma, lambda a: unit.resolve(type(Ma))(f(a))))
-
-
-@multipledispatch
-def join(Ma: Monad) -> Monad:
-    """
-    Removes a layer of monadic structure
-    
-    Signature: `Monad M => join :: M<M<a>> -> M<a>`
-    """
-    return flatmap(Ma, identity)
+        Signature: `Monad M => M<M<a>>.join :: M<a>`
+        """
+        return self.flatmap(identity)
 
 
 #########################################################################################
 #########################################################################################
 
 
-class MonadPlus(abc.ABC):
+class MonadPlus(Monad, Alternative):
     """
     The monad-plus type, for a monad that supports success and failure
-    
-    A type becomes a monad-plus by being a monad and an alternative
     """
 
-    @classmethod
-    def __subclasshook__(cls, other):
-        return issubclass(other, Monad) and issubclass(other, Alternative)
-
-
-# MonadPlus operators
-
-@auto_bind
-@multipledispatch
-def filter(p: collections.Callable, Ma: MonadPlus) -> MonadPlus:
-    """
-    Generic MonadPlus equivalent of filter for lists
-    
-    Signature: `MonadPlus M => filter :: (a -> bool) -> M<a> -> M<a>`
-    """
-    return flatmap(Ma, lambda a: unit.resolve(type(Ma))(a) if p(a) else empty.resolve(type(Ma))())
-    
+    def filter(self, p: collections.Callable) -> MonadPlus:
+        """
+        Generic MonadPlus equivalent of filter for lists
+        
+        Signature: `MonadPlus M => M<a>.filter :: (a -> bool) -> M<a>`
+        """
+        return self.flatmap(lambda a: self.__class__.unit(a) if p(a) else self.__class__.empty())

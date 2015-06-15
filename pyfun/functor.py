@@ -6,31 +6,18 @@ This module provides the functor type and associated operations
 
 import abc, collections
 
-from .funcutils import auto_bind, multipledispatch
 
-
-# We derive from ABC purely for the convenience of __subclasshook__ (as opposed to defining
-# our own metaclasses to use __(subclass|instance)check__
 class Functor(abc.ABC):
     """
     The functor type for types that can be mapped over
-    
-    A type becomes a functor by providing an implementation for map
     """
 
-    @classmethod
-    def __subclasshook__(cls, other):
-        return map.resolve(collections.Callable, other) is not map.default
-
-
-## Functor operators
-
-@auto_bind
-@multipledispatch
-def map(f: collections.Callable, Fa: Functor) -> Functor:
-    """
-    Returns a functor 'containing' the result of applying `f` to the 'contents' of `Fa`
-    
-    Signature: `Functor F => map :: (a -> b) -> F<a> -> F<b>`
-    """
-    raise TypeError('Not implemented for %s' % type(Fa).__name__)
+    @abc.abstractmethod
+    @staticmethod
+    def map(self, f: collections.Callable) -> Functor:
+        """
+        Returns a new functor 'containing' the result of applying `f` to the 'contents' of
+        this functor
+        
+        Signature: `Functor F => F<a>.map :: (a -> b) -> F<b>`
+        """

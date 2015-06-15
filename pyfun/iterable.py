@@ -4,27 +4,33 @@ This module implements several type-classes for iterables
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-from collections import Iterable, Callable
+import itertools, collections
 
-from .monad import flatmap, unit, binop, empty
+from .monad import MonadPlus
 
 
-# Monad-plus implementation for generic iterables
-
-@flatmap.register
-def _flatmap(xs: Iterable, f: Callable) -> Iterable:
-    for x in xs:
-        yield from f(x)
-
-@unit.register(Iterable)
-def _unit(a) -> Iterable:
-    yield a
-
-@binop.register
-def _binop(xs: Iterable, ys: Iterable) -> Iterable:
-    yield from xs
-    yield from ys
+class IterableM(MonadPlus):
+    """
+    Monad-plus implementation for iterables
+    """
     
-@empty.register(Iterable)
-def _empty() -> Iterable:
-    yield from ()
+    def __init__(self, iterable):
+        self.__iter = iter(iterable)
+        
+    def __iter__(self):
+        self.__iter, iter = itertools.tee(self.__iter)
+        return iter
+
+    def flatmap(self, f: collections.Callable) -> IterableM:
+        return IterableM(itertools.chain.from_iterable(f(x) for x in self.__iter))
+    
+    @staticmethod
+    def unit(a) -> IterableM:
+        return IterableM((a,))
+    
+    def binop(self, Fother: collections.Iterable) -> IterableM:
+        return IterableM(itertools.chain(self, Fother))
+        
+    @staticmethod
+    def empty() -> IterableM:
+        return IterableM(())

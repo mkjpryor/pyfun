@@ -4,50 +4,38 @@ This module provides the applicative and alternative types and associated operat
 @author: Matt Pryor <mkjpryor@gmail.com>
 """
 
-import abc, functools
+import abc, functools, collections
 
-from .funcutils import n_args, auto_bind, auto_bind_n, generic, multipledispatch
-from .functor import map
+from .funcutils import n_args, auto_bind, auto_bind_n
+from .functor import Functor
 
 
-class Applicative(abc.ABC):
+class Applicative(Functor):
     """
     The applicative type, a functor with application
-    
-    A type becomes an applicative by providing implementations for ap and unit
     """
 
-    @classmethod
-    def __subclasshook__(cls, other):
-        return ap.resolve(other, other) is not ap.default and unit.resolve(other) is not None
-    
+    @abc.abstractmethod
+    def ap(self, Fa: Applicative) -> Applicative:
+        """
+        Perform computation inside the applicative structure
         
-## Applicative operators
+        `self` must be an applicative over functions
+            
+        Signature: `Applicative F => F<(a -> b)>.ap :: F<a> -> F<b>`
+        """
 
-@auto_bind
-@multipledispatch
-def ap(Ff: Applicative, Fa: Applicative) -> Applicative:
-    """
-    Perform computation inside the applicative structure
-        
-    Signature: `Applicative F => ap :: F<(a -> b)> -> F<a> -> F<b>`
-    """
-    raise TypeError('Not implemented for %s' % type(Ff).__name__)
+    @abc.abstractmethod
+    @staticmethod
+    def unit(a) -> Applicative:
+        """
+        Lifts a value into the applicative structure
+            
+        Signature: `Applicative F => unit :: a -> F<a>`
+        """
 
-
-@generic
-def unit(a) -> Applicative:
-    """
-    Lifts a value into the applicative structure
-        
-    Signature: `Applicative F => unit :: F -> a -> F<a>`
-    """
-    pass
-
-
-@map.register
-def _map(f, Fa: Applicative) -> Applicative:
-    return ap(unit.resolve(type(Fa))(f), Fa)
+    def map(self, f: collections.Callable) -> Applicative:
+        return self.__class__.unit(f).ap(self)
     
 
 def lift(f):
@@ -79,13 +67,12 @@ def lift_n(n: int, f):
     # function accepting the rest of the arguments back
     f = auto_bind_n(n, f)
     
+    @functools.wraps(f)
     def lifted(*args):
         # If no arguments are given, just call f with no args
         # Otherwise, use the first argument to work out what applicative to lift the
         # function into before using ap to sequence the computation
-        return functools.reduce(ap, args[1:], map(f, args[0])) if args else f()
-    # Update argspec, etc. to look like f
-    functools.update_wrapper(lifted, f)
+        return functools.reduce(lambda a, x: a.ap(x), args[1:], args[0].map(f)) if args else f()
     # Auto-bind the lifted function for n arguments
     return auto_bind_n(n, lifted)
 
@@ -94,39 +81,24 @@ def lift_n(n: int, f):
 #########################################################################################
 
 
-class Alternative(abc.ABC):
+class Alternative(Applicative):
     """
     The alternative type, a monoid on applicatives
+    """
     
-    A type becomes an alternative by providing implementations for binop and empty in
-    addition to being an applicative
-    """
-
-    @classmethod
-    def __subclasshook__(cls, other):
-        return issubclass(other, Applicative) and \
-               binop.resolve(other, other) is not binop.default and \
-               empty.resolve(other) is not None    
+    @abc.abstractmethod
+    def binop(self, Fother: Alternative) -> Alternative:
+        """
+        An associative binary operation
+           
+        Signature: `Alternative F => F<a>.binop :: F<a> -> F<a>`
+        """
     
-
-## Alternative operators
-
-@auto_bind
-@multipledispatch
-def binop(Fa: Alternative, Fother: Alternative) -> Alternative:
-    """
-    An associative binary operation
-       
-    Signature: `Alternative F => binop :: F<a> -> F<a> -> F<a>`
-    """
-    raise TypeError('Not implemented for %s' % type(Fa).__name__)
-
-
-@generic
-def empty() -> Alternative:
-    """
-    The identity of `binop`
-        
-    Signature: `Alternative F => empty :: F -> F<a>`
-    """
-    pass
+    @abc.abstractmethod
+    @staticmethod
+    def empty() -> Alternative:
+        """
+        The identity of `binop`
+            
+        Signature: `Alternative F => empty :: F<a>`
+        """
